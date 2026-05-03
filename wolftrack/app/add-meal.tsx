@@ -36,7 +36,7 @@ function getTodayDate() {
 
 function createEmptyItem(): MealItem {
   return {
-    id: Date.now().toString(),
+    id: `${Date.now()}-${Math.random()}`,
     foodName: '',
     quantity: '',
     calories: '',
@@ -163,7 +163,7 @@ export default function AddMealScreen() {
         value={mealDate}
         onChangeText={setMealDate}
         placeholder="YYYY-MM-DD"
-        placeholderTextColor={theme.colors.gray}
+        placeholderTextColor={theme.colors.muted}
         style={styles.input}
       />
 
@@ -204,7 +204,7 @@ export default function AddMealScreen() {
             value={item.foodName}
             onChangeText={(value) => updateItem(item.id, 'foodName', value)}
             placeholder="Es. Riso basmati"
-            placeholderTextColor={theme.colors.gray}
+            placeholderTextColor={theme.colors.muted}
             style={styles.input}
           />
 
@@ -213,7 +213,7 @@ export default function AddMealScreen() {
             value={item.quantity}
             onChangeText={(value) => updateItem(item.id, 'quantity', value)}
             placeholder="Es. 100 g"
-            placeholderTextColor={theme.colors.gray}
+            placeholderTextColor={theme.colors.muted}
             style={styles.input}
           />
 
@@ -222,11 +222,9 @@ export default function AddMealScreen() {
               <Text style={styles.label}>Calorie</Text>
               <TextInput
                 value={item.calories}
-                onChangeText={(value) =>
-                  updateItem(item.id, 'calories', value)
-                }
+                onChangeText={(value) => updateItem(item.id, 'calories', value)}
                 placeholder="kcal"
-                placeholderTextColor={theme.colors.gray}
+                placeholderTextColor={theme.colors.muted}
                 keyboardType="numeric"
                 style={styles.input}
               />
@@ -236,11 +234,9 @@ export default function AddMealScreen() {
               <Text style={styles.label}>Proteine</Text>
               <TextInput
                 value={item.protein}
-                onChangeText={(value) =>
-                  updateItem(item.id, 'protein', value)
-                }
+                onChangeText={(value) => updateItem(item.id, 'protein', value)}
                 placeholder="g"
-                placeholderTextColor={theme.colors.gray}
+                placeholderTextColor={theme.colors.muted}
                 keyboardType="numeric"
                 style={styles.input}
               />
@@ -252,11 +248,9 @@ export default function AddMealScreen() {
               <Text style={styles.label}>Carboidrati</Text>
               <TextInput
                 value={item.carbs}
-                onChangeText={(value) =>
-                  updateItem(item.id, 'carbs', value)
-                }
+                onChangeText={(value) => updateItem(item.id, 'carbs', value)}
                 placeholder="g"
-                placeholderTextColor={theme.colors.gray}
+                placeholderTextColor={theme.colors.muted}
                 keyboardType="numeric"
                 style={styles.input}
               />
@@ -268,7 +262,7 @@ export default function AddMealScreen() {
                 value={item.fat}
                 onChangeText={(value) => updateItem(item.id, 'fat', value)}
                 placeholder="g"
-                placeholderTextColor={theme.colors.gray}
+                placeholderTextColor={theme.colors.muted}
                 keyboardType="numeric"
                 style={styles.input}
               />
@@ -286,7 +280,7 @@ export default function AddMealScreen() {
         value={notes}
         onChangeText={setNotes}
         placeholder="Es. dopo allenamento, pasto libero..."
-        placeholderTextColor={theme.colors.gray}
+        placeholderTextColor={theme.colors.muted}
         multiline
         style={[styles.input, styles.textArea]}
       />
@@ -328,7 +322,7 @@ const styles = {
   },
 
   subtitle: {
-    color: theme.colors.gray,
+    color: theme.colors.muted,
     fontSize: 13,
   },
 
