@@ -17,8 +17,8 @@ export default function FloatingAddMenu() {
         position: 'absolute',
         left: 0,
         right: 0,
-        bottom: 28,
-        height: 270,
+        bottom: 20,
+        height: 250,
         alignItems: 'center',
         justifyContent: 'flex-end',
         zIndex: 100,
@@ -26,68 +26,79 @@ export default function FloatingAddMenu() {
       pointerEvents="box-none"
     >
       {open && (
-        <View
-          style={{
-            position: 'absolute',
-            bottom: 92,
-            left: 0,
-            right: 0,
-            height: 170,
-          }}
-          pointerEvents="box-none"
-        >
-          <Connector style={{ left: '30%', bottom: 28, transform: [{ rotate: '-42deg' }] }} />
-          <Connector style={{ alignSelf: 'center', bottom: 18 }} />
-          <Connector style={{ right: '30%', bottom: 28, transform: [{ rotate: '42deg' }] }} />
-
-          <ActionBubble
-            label="AGGIUNGI\nMISURAZIONE"
-            icon="📏"
-            position={{ left: 24, bottom: 52 }}
-            onPress={() => goTo('/add-measurement')}
+        <>
+          <Pressable
+            onPress={() => setOpen(false)}
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: -900,
+              bottom: -40,
+              backgroundColor: 'rgba(0,0,0,0.45)',
+            }}
           />
 
-          <ActionBubble
-            label="AGGIUNGI\nALLENAMENTO"
-            icon="🏋️"
-            position={{ alignSelf: 'center', bottom: 100 }}
-            onPress={() => goTo('/add-workout')}
-          />
+          <View
+            style={{
+              position: 'absolute',
+              bottom: 88,
+              left: 0,
+              right: 0,
+              height: 150,
+            }}
+            pointerEvents="box-none"
+          >
+            <ActionBubble
+              label="Misurazione"
+              icon="📏"
+              position={{ left: 20, bottom: 34 }}
+              onPress={() => goTo('/add-measurement')}
+            />
 
-          <ActionBubble
-            label="AGGIUNGI\nPASTO"
-            icon="🥗"
-            position={{ right: 24, bottom: 52 }}
-            onPress={() => goTo('/add-meal')}
-          />
-        </View>
+            <ActionBubble
+              label="Allenamento"
+              icon="🏋️"
+              position={{ alignSelf: 'center', bottom: 92 }}
+              onPress={() => goTo('/add-workout')}
+              highlighted
+            />
+
+            <ActionBubble
+              label="Pasto"
+              icon="🥗"
+              position={{ right: 20, bottom: 34 }}
+              onPress={() => goTo('/add-meal')}
+            />
+          </View>
+        </>
       )}
 
       <Pressable
         onPress={() => setOpen(!open)}
         style={{
-          width: 74,
-          height: 74,
-          borderRadius: 37,
-          backgroundColor: 'rgba(8, 13, 16, 0.95)',
-          borderWidth: 3,
+          width: 68,
+          height: 68,
+          borderRadius: 34,
+          backgroundColor: open ? theme.colors.primary : 'rgba(8, 13, 16, 0.96)',
+          borderWidth: 2,
           borderColor: theme.colors.primary,
           alignItems: 'center',
           justifyContent: 'center',
           shadowColor: theme.colors.primaryGlow,
           shadowOpacity: 1,
-          shadowRadius: 22,
+          shadowRadius: 18,
           elevation: 18,
         }}
       >
         <Text
           style={{
-            color: theme.colors.primaryGlow,
-            fontSize: 46,
-            lineHeight: 50,
+            color: open ? '#020405' : theme.colors.primaryGlow,
+            fontSize: 42,
+            lineHeight: 46,
             fontFamily: 'Orbitron_700Bold',
-            textShadowColor: theme.colors.primaryGlow,
-            textShadowRadius: 18,
+            textShadowColor: open ? 'transparent' : theme.colors.primaryGlow,
+            textShadowRadius: 14,
           }}
         >
           {open ? '×' : '+'}
@@ -102,70 +113,52 @@ function ActionBubble({
   icon,
   position,
   onPress,
+  highlighted = false,
 }: {
   label: string
   icon: string
   position: any
   onPress: () => void
+  highlighted?: boolean
 }) {
   return (
     <Pressable
       onPress={onPress}
       style={{
         position: 'absolute',
-        width: 126,
-        height: 126,
-        borderRadius: 28,
-        backgroundColor: 'rgba(8, 13, 16, 0.94)',
-        borderWidth: 2,
+        width: highlighted ? 120 : 108,
+        height: highlighted ? 120 : 108,
+        borderRadius: 30,
+        backgroundColor: highlighted
+          ? 'rgba(0, 174, 234, 0.18)'
+          : 'rgba(8, 13, 16, 0.96)',
+        borderWidth: 1.5,
         borderColor: theme.colors.primary,
         alignItems: 'center',
         justifyContent: 'center',
         shadowColor: theme.colors.primaryGlow,
-        shadowOpacity: 0.8,
-        shadowRadius: 18,
-        elevation: 16,
+        shadowOpacity: highlighted ? 0.9 : 0.55,
+        shadowRadius: highlighted ? 18 : 12,
+        elevation: highlighted ? 16 : 12,
         ...position,
       }}
     >
-      <Text
-        style={{
-          fontSize: 32,
-          marginBottom: 10,
-        }}
-      >
+      <Text style={{ fontSize: highlighted ? 34 : 30, marginBottom: 8 }}>
         {icon}
       </Text>
 
       <Text
         style={{
           color: theme.colors.white,
-          fontSize: 11,
-          lineHeight: 17,
+          fontSize: 10,
           textAlign: 'center',
           letterSpacing: 1.2,
           fontFamily: 'Orbitron_700Bold',
+          textTransform: 'uppercase',
         }}
       >
         {label}
       </Text>
     </Pressable>
-  )
-}
-
-function Connector({ style }: { style: any }) {
-  return (
-    <View
-      style={{
-        position: 'absolute',
-        width: 2,
-        height: 90,
-        borderStyle: 'dashed',
-        borderWidth: 1,
-        borderColor: theme.colors.primary,
-        opacity: 0.9,
-        ...style,
-      }}
-    />
   )
 }
