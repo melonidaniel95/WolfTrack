@@ -12,112 +12,175 @@ export default function FloatingAddMenu() {
   }
 
   return (
-    <View
-      style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 20,
-        height: 250,
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        zIndex: 100,
-      }}
-      pointerEvents="box-none"
-    >
+    <>
+      {/* MENU FLOATING + */}
       {open && (
         <>
+          {/* Overlay */}
           <Pressable
             onPress={() => setOpen(false)}
             style={{
               position: 'absolute',
+              top: 0,
+              bottom: 0,
               left: 0,
               right: 0,
-              top: -900,
-              bottom: -40,
-              backgroundColor: 'rgba(0,0,0,0.45)',
+              backgroundColor: 'rgba(0,0,0,0.4)',
+              zIndex: 90,
             }}
           />
 
+          {/* Azioni sopra il + */}
           <View
             style={{
               position: 'absolute',
-              bottom: 88,
+              bottom: 110,
               left: 0,
               right: 0,
-              height: 150,
+              alignItems: 'center',
+              zIndex: 100,
             }}
-            pointerEvents="box-none"
           >
-            <ActionBubble
-              label="Misurazione"
-              icon="📏"
-              position={{ left: 20, bottom: 34 }}
-              onPress={() => goTo('/add-measurement')}
-            />
+            <View style={{ flexDirection: 'row', gap: 16 }}>
+              <ActionBubble
+                label="Misura"
+                icon="📏"
+                onPress={() => goTo('/add-measurement')}
+              />
 
-            <ActionBubble
-              label="Allenamento"
-              icon="🏋️"
-              position={{ alignSelf: 'center', bottom: 92 }}
-              onPress={() => goTo('/add-workout')}
-              highlighted
-            />
+              <ActionBubble
+                label="Allenamento"
+                icon="🏋️"
+                onPress={() => goTo('/add-workout')}
+                highlighted
+              />
 
-            <ActionBubble
-              label="Pasto"
-              icon="🥗"
-              position={{ right: 20, bottom: 34 }}
-              onPress={() => goTo('/add-meal')}
-            />
+              <ActionBubble
+                label="Pasto"
+                icon="🥗"
+                onPress={() => goTo('/add-meal')}
+              />
+            </View>
           </View>
         </>
       )}
 
-      <Pressable
-        onPress={() => setOpen(!open)}
+      {/* BOTTOM BAR */}
+      <View
         style={{
-          width: 68,
-          height: 68,
-          borderRadius: 34,
-          backgroundColor: open ? theme.colors.primary : 'rgba(8, 13, 16, 0.96)',
-          borderWidth: 2,
+          position: 'absolute',
+          left: 16,
+          right: 16,
+          bottom: 20,
+          height: 76,
+          borderRadius: 28,
+          backgroundColor: 'rgba(8, 13, 16, 0.96)',
+          borderWidth: 1.5,
           borderColor: theme.colors.primary,
+          flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'center',
-          shadowColor: theme.colors.primaryGlow,
-          shadowOpacity: 1,
-          shadowRadius: 18,
-          elevation: 18,
+          justifyContent: 'space-between',
+          paddingHorizontal: 10,
+          zIndex: 100,
         }}
       >
-        <Text
+        <MenuItem
+          label="Misure"
+          icon="📏"
+          onPress={() => goTo('/measurements')}
+        />
+
+        <MenuItem
+          label="Pasti"
+          icon="🥗"
+          onPress={() => goTo('/meals')}
+        />
+
+        {/* + CENTRALE */}
+        <Pressable
+          onPress={() => setOpen(!open)}
           style={{
-            color: open ? '#020405' : theme.colors.primaryGlow,
-            fontSize: 42,
-            lineHeight: 46,
-            fontFamily: 'Orbitron_700Bold',
-            textShadowColor: open ? 'transparent' : theme.colors.primaryGlow,
-            textShadowRadius: 14,
+            width: 68,
+            height: 68,
+            borderRadius: 34,
+            backgroundColor: open
+              ? theme.colors.primary
+              : 'rgba(8, 13, 16, 0.96)',
+            borderWidth: 2,
+            borderColor: theme.colors.primary,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginTop: -34,
           }}
         >
-          {open ? '×' : '+'}
-        </Text>
-      </Pressable>
-    </View>
+          <Text
+            style={{
+              color: open ? '#020405' : theme.colors.primary,
+              fontSize: 42,
+              fontFamily: 'Orbitron_700Bold',
+            }}
+          >
+            {open ? '×' : '+'}
+          </Text>
+        </Pressable>
+
+        <MenuItem
+          label="Report"
+          icon="📊"
+          onPress={() => goTo('/reports')}
+        />
+
+        <MenuItem
+          label="Obiettivi"
+          icon="🎯"
+          onPress={() => goTo('/goals')}
+        />
+      </View>
+    </>
+  )
+}
+
+function MenuItem({
+  label,
+  icon,
+  onPress,
+}: {
+  label: string
+  icon: string
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flex: 1,
+        alignItems: 'center',
+      }}
+    >
+      <Text style={{ fontSize: 20 }}>{icon}</Text>
+
+      <Text
+        style={{
+          color: theme.colors.white,
+          fontSize: 8,
+          fontFamily: 'Orbitron_700Bold',
+          textTransform: 'uppercase',
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
   )
 }
 
 function ActionBubble({
   label,
   icon,
-  position,
   onPress,
   highlighted = false,
 }: {
   label: string
   icon: string
-  position: any
   onPress: () => void
   highlighted?: boolean
 }) {
@@ -125,10 +188,9 @@ function ActionBubble({
     <Pressable
       onPress={onPress}
       style={{
-        position: 'absolute',
-        width: highlighted ? 120 : 108,
-        height: highlighted ? 120 : 108,
-        borderRadius: 30,
+        width: highlighted ? 110 : 100,
+        height: highlighted ? 110 : 100,
+        borderRadius: 24,
         backgroundColor: highlighted
           ? 'rgba(0, 174, 234, 0.18)'
           : 'rgba(8, 13, 16, 0.96)',
@@ -136,23 +198,15 @@ function ActionBubble({
         borderColor: theme.colors.primary,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: theme.colors.primaryGlow,
-        shadowOpacity: highlighted ? 0.9 : 0.55,
-        shadowRadius: highlighted ? 18 : 12,
-        elevation: highlighted ? 16 : 12,
-        ...position,
       }}
     >
-      <Text style={{ fontSize: highlighted ? 34 : 30, marginBottom: 8 }}>
-        {icon}
-      </Text>
+      <Text style={{ fontSize: highlighted ? 32 : 28 }}>{icon}</Text>
 
       <Text
         style={{
           color: theme.colors.white,
-          fontSize: 10,
-          textAlign: 'center',
-          letterSpacing: 1.2,
+          fontSize: 9,
+          marginTop: 6,
           fontFamily: 'Orbitron_700Bold',
           textTransform: 'uppercase',
         }}

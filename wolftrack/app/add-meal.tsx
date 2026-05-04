@@ -1,6 +1,8 @@
+// app/add-meal.tsx
 import { useState } from 'react'
 import {
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -8,6 +10,8 @@ import {
   View,
 } from 'react-native'
 import { router } from 'expo-router'
+import { CameraView, useCameraPermissions } from 'expo-camera'
+import * as ImagePicker from 'expo-image-picker'
 import { theme } from '../constants/theme'
 import { supabase } from '../lib/supabase'
 
@@ -23,12 +27,7 @@ type MealItem = {
   fat: string
 }
 
-const MEAL_TYPES: MealType[] = [
-  'Colazione',
-  'Pranzo',
-  'Cena',
-  'Spuntino',
-]
+const MEAL_TYPES: MealType[] = ['Colazione', 'Pranzo', 'Cena', 'Spuntino']
 
 function getTodayDate() {
   return new Date().toISOString().split('T')[0]
@@ -53,6 +52,15 @@ export default function AddMealScreen() {
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
 
+  const [, requestCameraPermission] = useCameraPermissions()
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [scanningItemId, setScanningItemId] = useState<string | null>(null)
+  const [scanned, setScanned] = useState(false)
+  const [scannerMessage, setScannerMessage] = useState(
+    'Inquadra il codice a barre'
+  )
+  const [scannerLoading, setScannerLoading] = useState(false)
+
   function toNumber(value: string) {
     const number = Number(value.replace(',', '.'))
     return Number.isNaN(number) ? 0 : number
@@ -76,9 +84,155 @@ export default function AddMealScreen() {
       return
     }
 
-    setItems((currentItems) =>
-      currentItems.filter((item) => item.id !== id)
+    setItems((currentItems) => currentItems.filter((item) => item.id !== id))
+  }
+
+  async function findOrCreateFoodByBarcode(barcode: string) {
+    const { data: existingFood } = await supabase
+      .from('foods')
+      .select('*')
+      .eq('barcode', barcode)
+      .maybeSingle()
+
+    if (existingFood) return existingFood
+
+    const response = await fetch(
+      `https://world.openfoodfacts.org/api/v2/product/${barcode}.json`
     )
+
+    const result = await response.json()
+
+    if (!result.product) {
+      throw new Error('Prodotto non trovato')
+    }
+
+    const product = result.product
+    const nutriments = product.nutriments || {}
+
+    const foodToInsert = {
+      barcode,
+      name: product.product_name || 'Prodotto senza nome',
+      brand: product.brands || null,
+      calories: nutriments['energy-kcal_100g'] || 0,
+      protein: nutriments.proteins_100g || 0,
+      carbs: nutriments.carbohydrates_100g || 0,
+      fat: nutriments.fat_100g || 0,
+      source: 'open_food_facts',
+    }
+
+    const { data: newFood, error } = await supabase
+      .from('foods')
+      .insert(foodToInsert)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    return newFood
+  }
+
+  async function handleBarcodeScan(itemId: string) {
+    const permission = await requestCameraPermission()
+
+    if (!permission.granted) {
+      Alert.alert('Permesso negato', 'Devi autorizzare la fotocamera.')
+      return
+    }
+
+    setScanningItemId(itemId)
+    setScanned(false)
+    setScannerLoading(false)
+    setScannerMessage('Inquadra il codice a barre')
+    setScannerOpen(true)
+  }
+
+  async function handleBarcodeDetected(data: string) {
+    if (scanned || !scanningItemId || scannerLoading) return
+
+    setScanned(true)
+    setScannerLoading(true)
+    setScannerMessage(`Barcode riconosciuto: ${data}`)
+
+    try {
+      const food = await findOrCreateFoodByBarcode(data)
+
+      updateItem(scanningItemId, 'foodName', food.name || '')
+      updateItem(scanningItemId, 'quantity', '100 g')
+      updateItem(scanningItemId, 'calories', String(food.calories || 0))
+      updateItem(scanningItemId, 'protein', String(food.protein || 0))
+      updateItem(scanningItemId, 'carbs', String(food.carbs || 0))
+      updateItem(scanningItemId, 'fat', String(food.fat || 0))
+
+      setScannerMessage(`Prodotto trovato: ${food.name || 'Alimento'}`)
+
+      setTimeout(() => {
+        setScannerOpen(false)
+        setScanningItemId(null)
+        setScannerLoading(false)
+        Alert.alert('Prodotto trovato', food.name || 'Alimento importato')
+      }, 700)
+    } catch (error: any) {
+      setScannerMessage('Barcode letto, ma prodotto non trovato')
+
+      setTimeout(() => {
+        setScanned(false)
+        setScannerLoading(false)
+        setScannerMessage('Riprova con un altro codice a barre')
+        Alert.alert(
+          'Prodotto non trovato',
+          error.message || 'Barcode non trovato.'
+        )
+      }, 800)
+    }
+  }
+
+  async function handleImageUpload(itemId: string) {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+
+    if (status !== 'granted') {
+      Alert.alert('Permesso negato', 'Devi autorizzare l’accesso alle foto.')
+      return
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    })
+
+    if (result.canceled) return
+
+    Alert.alert(
+      'Foto selezionata',
+      'Foto caricata. Qui collegherai il riconoscimento AI.'
+    )
+
+    console.log('Image URI:', result.assets[0].uri, 'Item ID:', itemId)
+  }
+
+  async function saveFoodIfMissing(item: MealItem) {
+    const name = item.foodName.trim()
+
+    if (!name) return
+
+    const { data: existingFood } = await supabase
+      .from('foods')
+      .select('id')
+      .ilike('name', name)
+      .maybeSingle()
+
+    if (existingFood) return
+
+    await supabase.from('foods').insert({
+      name,
+      barcode: null,
+      brand: null,
+      calories: toNumber(item.calories),
+      protein: toNumber(item.protein),
+      carbs: toNumber(item.carbs),
+      fat: toNumber(item.fat),
+      source: 'manual',
+    })
   }
 
   async function handleSaveMeal() {
@@ -113,7 +267,7 @@ export default function AddMealScreen() {
         user_id: user.id,
         meal_date: mealDate,
         meal_type: mealType,
-        notes: notes.trim(),
+        notes: notes.trim() || null,
       })
       .select()
       .single()
@@ -138,167 +292,231 @@ export default function AddMealScreen() {
       .from('meal_items')
       .insert(mealItemsToInsert)
 
-    setLoading(false)
-
     if (itemsError) {
+      setLoading(false)
       Alert.alert('Errore', itemsError.message)
       return
     }
+
+    await Promise.all(validItems.map(saveFoodIfMissing))
+
+    setLoading(false)
 
     Alert.alert('Pasto salvato', 'Il pasto è stato registrato correttamente.')
     router.back()
   }
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Aggiungi pasto</Text>
-        <Text style={styles.subtitle}>
-          Registra tutti gli alimenti mangiati in un pasto
-        </Text>
-      </View>
+    <>
+      <Modal visible={scannerOpen} animationType="slide">
+        <View style={styles.scannerContainer}>
+          <CameraView
+            style={styles.camera}
+            facing="back"
+            barcodeScannerSettings={{
+              barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128'],
+            }}
+            onBarcodeScanned={({ data }) => handleBarcodeDetected(data)}
+          />
 
-      <Text style={styles.label}>Data</Text>
-      <TextInput
-        value={mealDate}
-        onChangeText={setMealDate}
-        placeholder="YYYY-MM-DD"
-        placeholderTextColor={theme.colors.muted}
-        style={styles.input}
-      />
+          <View style={styles.scanFrame} />
 
-      <Text style={styles.label}>Tipo pasto</Text>
+          <View style={styles.scannerOverlay}>
+            <Text style={styles.scannerTitle}>Scansiona barcode</Text>
 
-      <View style={styles.mealGrid}>
-        {MEAL_TYPES.map((type) => {
-          const active = mealType === type
+            <Text style={styles.scannerMessage}>
+              {scannerLoading ? 'Ricerca prodotto...' : scannerMessage}
+            </Text>
 
-          return (
             <Pressable
-              key={type}
-              onPress={() => setMealType(type)}
-              style={[styles.mealChip, active && styles.activeChip]}
+              onPress={() => {
+                setScannerOpen(false)
+                setScanningItemId(null)
+                setScannerLoading(false)
+                setScanned(false)
+              }}
+              style={styles.cancelScanButton}
             >
-              <Text style={[styles.mealChipText, active && styles.activeText]}>
-                {type}
-              </Text>
+              <Text style={styles.cancelScanText}>Chiudi scanner</Text>
             </Pressable>
-          )
-        })}
-      </View>
-
-      <Text style={styles.sectionTitle}>Alimenti</Text>
-
-      {items.map((item, index) => (
-        <View key={item.id} style={styles.foodCard}>
-          <View style={styles.foodCardHeader}>
-            <Text style={styles.foodTitle}>Alimento {index + 1}</Text>
-
-            <Pressable onPress={() => removeItem(item.id)}>
-              <Text style={styles.removeText}>Rimuovi</Text>
-            </Pressable>
-          </View>
-
-          <Text style={styles.label}>Nome alimento</Text>
-          <TextInput
-            value={item.foodName}
-            onChangeText={(value) => updateItem(item.id, 'foodName', value)}
-            placeholder="Es. Riso basmati"
-            placeholderTextColor={theme.colors.muted}
-            style={styles.input}
-          />
-
-          <Text style={styles.label}>Quantità</Text>
-          <TextInput
-            value={item.quantity}
-            onChangeText={(value) => updateItem(item.id, 'quantity', value)}
-            placeholder="Es. 100 g"
-            placeholderTextColor={theme.colors.muted}
-            style={styles.input}
-          />
-
-          <View style={styles.row}>
-            <View style={styles.half}>
-              <Text style={styles.label}>Calorie</Text>
-              <TextInput
-                value={item.calories}
-                onChangeText={(value) => updateItem(item.id, 'calories', value)}
-                placeholder="kcal"
-                placeholderTextColor={theme.colors.muted}
-                keyboardType="numeric"
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.half}>
-              <Text style={styles.label}>Proteine</Text>
-              <TextInput
-                value={item.protein}
-                onChangeText={(value) => updateItem(item.id, 'protein', value)}
-                placeholder="g"
-                placeholderTextColor={theme.colors.muted}
-                keyboardType="numeric"
-                style={styles.input}
-              />
-            </View>
-          </View>
-
-          <View style={styles.row}>
-            <View style={styles.half}>
-              <Text style={styles.label}>Carboidrati</Text>
-              <TextInput
-                value={item.carbs}
-                onChangeText={(value) => updateItem(item.id, 'carbs', value)}
-                placeholder="g"
-                placeholderTextColor={theme.colors.muted}
-                keyboardType="numeric"
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.half}>
-              <Text style={styles.label}>Grassi</Text>
-              <TextInput
-                value={item.fat}
-                onChangeText={(value) => updateItem(item.id, 'fat', value)}
-                placeholder="g"
-                placeholderTextColor={theme.colors.muted}
-                keyboardType="numeric"
-                style={styles.input}
-              />
-            </View>
           </View>
         </View>
-      ))}
+      </Modal>
 
-      <Pressable onPress={addItem} style={styles.addFoodButton}>
-        <Text style={styles.addFoodButtonText}>+ Aggiungi alimento</Text>
-      </Pressable>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Aggiungi pasto</Text>
+          <Text style={styles.subtitle}>
+            Registra gli alimenti o usa barcode/foto per riconoscerli
+          </Text>
+        </View>
 
-      <Text style={styles.label}>Note pasto</Text>
-      <TextInput
-        value={notes}
-        onChangeText={setNotes}
-        placeholder="Es. dopo allenamento, pasto libero..."
-        placeholderTextColor={theme.colors.muted}
-        multiline
-        style={[styles.input, styles.textArea]}
-      />
+        <Text style={styles.label}>Data</Text>
+        <TextInput
+          value={mealDate}
+          onChangeText={setMealDate}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={theme.colors.muted}
+          style={styles.input}
+        />
 
-      <Pressable
-        onPress={handleSaveMeal}
-        disabled={loading}
-        style={[styles.saveButton, loading && styles.disabledButton]}
-      >
-        <Text style={styles.saveButtonText}>
-          {loading ? 'Salvataggio...' : 'Salva pasto'}
-        </Text>
-      </Pressable>
+        <Text style={styles.label}>Tipo pasto</Text>
 
-      <Pressable onPress={() => router.back()} style={styles.cancelButton}>
-        <Text style={styles.cancelButtonText}>Annulla</Text>
-      </Pressable>
-    </ScrollView>
+        <View style={styles.mealGrid}>
+          {MEAL_TYPES.map((type) => {
+            const active = mealType === type
+
+            return (
+              <Pressable
+                key={type}
+                onPress={() => setMealType(type)}
+                style={[styles.mealChip, active && styles.activeChip]}
+              >
+                <Text
+                  style={[styles.mealChipText, active && styles.activeText]}
+                >
+                  {type}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </View>
+
+        <Text style={styles.sectionTitle}>Alimenti</Text>
+
+        {items.map((item, index) => (
+          <View key={item.id} style={styles.foodCard}>
+            <View style={styles.foodCardHeader}>
+              <Text style={styles.foodTitle}>Alimento {index + 1}</Text>
+
+              <Pressable onPress={() => removeItem(item.id)}>
+                <Text style={styles.removeText}>Rimuovi</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.label}>Nome alimento</Text>
+            <TextInput
+              value={item.foodName}
+              onChangeText={(value) => updateItem(item.id, 'foodName', value)}
+              placeholder="Es. Riso basmati"
+              placeholderTextColor={theme.colors.muted}
+              style={styles.input}
+            />
+
+            <View style={styles.aiActions}>
+              <Pressable
+                onPress={() => handleBarcodeScan(item.id)}
+                style={styles.aiButton}
+              >
+                <Text style={styles.aiIcon}>📷</Text>
+                <Text style={styles.aiButtonText}>Barcode</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => handleImageUpload(item.id)}
+                style={styles.aiButton}
+              >
+                <Text style={styles.aiIcon}>🖼️</Text>
+                <Text style={styles.aiButtonText}>Foto cibo</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.label}>Quantità</Text>
+            <TextInput
+              value={item.quantity}
+              onChangeText={(value) => updateItem(item.id, 'quantity', value)}
+              placeholder="Es. 100 g"
+              placeholderTextColor={theme.colors.muted}
+              style={styles.input}
+            />
+
+            <View style={styles.row}>
+              <View style={styles.half}>
+                <Text style={styles.label}>Calorie</Text>
+                <TextInput
+                  value={item.calories}
+                  onChangeText={(value) =>
+                    updateItem(item.id, 'calories', value)
+                  }
+                  placeholder="kcal"
+                  placeholderTextColor={theme.colors.muted}
+                  keyboardType="numeric"
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.half}>
+                <Text style={styles.label}>Proteine</Text>
+                <TextInput
+                  value={item.protein}
+                  onChangeText={(value) =>
+                    updateItem(item.id, 'protein', value)
+                  }
+                  placeholder="g"
+                  placeholderTextColor={theme.colors.muted}
+                  keyboardType="numeric"
+                  style={styles.input}
+                />
+              </View>
+            </View>
+
+            <View style={styles.row}>
+              <View style={styles.half}>
+                <Text style={styles.label}>Carboidrati</Text>
+                <TextInput
+                  value={item.carbs}
+                  onChangeText={(value) => updateItem(item.id, 'carbs', value)}
+                  placeholder="g"
+                  placeholderTextColor={theme.colors.muted}
+                  keyboardType="numeric"
+                  style={styles.input}
+                />
+              </View>
+
+              <View style={styles.half}>
+                <Text style={styles.label}>Grassi</Text>
+                <TextInput
+                  value={item.fat}
+                  onChangeText={(value) => updateItem(item.id, 'fat', value)}
+                  placeholder="g"
+                  placeholderTextColor={theme.colors.muted}
+                  keyboardType="numeric"
+                  style={styles.input}
+                />
+              </View>
+            </View>
+          </View>
+        ))}
+
+        <Pressable onPress={addItem} style={styles.addFoodButton}>
+          <Text style={styles.addFoodButtonText}>+ Aggiungi alimento</Text>
+        </Pressable>
+
+        <Text style={styles.label}>Note pasto</Text>
+        <TextInput
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Es. dopo allenamento, pasto libero..."
+          placeholderTextColor={theme.colors.muted}
+          multiline
+          style={[styles.input, styles.textArea]}
+        />
+
+        <Pressable
+          onPress={handleSaveMeal}
+          disabled={loading}
+          style={[styles.saveButton, loading && styles.disabledButton]}
+        >
+          <Text style={styles.saveButtonText}>
+            {loading ? 'Salvataggio...' : 'Salva pasto'}
+          </Text>
+        </Pressable>
+
+        <Pressable onPress={() => router.back()} style={styles.cancelButton}>
+          <Text style={styles.cancelButtonText}>Annulla</Text>
+        </Pressable>
+      </ScrollView>
+    </>
   )
 }
 
@@ -307,6 +525,66 @@ const styles = {
     flex: 1,
     backgroundColor: theme.colors.background,
     padding: 20,
+  },
+
+  scannerContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+
+  camera: {
+    flex: 1,
+  },
+
+  scanFrame: {
+    position: 'absolute' as const,
+    top: '34%' as const,
+    left: 32,
+    right: 32,
+    height: 150,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0, 174, 234, 0.08)',
+  },
+
+  scannerOverlay: {
+    position: 'absolute' as const,
+    left: 20,
+    right: 20,
+    bottom: 40,
+    alignItems: 'center' as const,
+  },
+
+  scannerTitle: {
+    color: theme.colors.white,
+    fontSize: 18,
+    fontFamily: 'Orbitron_700Bold',
+    marginBottom: 10,
+  },
+
+  scannerMessage: {
+    color: theme.colors.white,
+    fontSize: 13,
+    textAlign: 'center' as const,
+    marginBottom: 18,
+    opacity: 0.85,
+  },
+
+  cancelScanButton: {
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderRadius: 18,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(8, 13, 16, 0.96)',
+  },
+
+  cancelScanText: {
+    color: theme.colors.white,
+    fontSize: 12,
+    fontFamily: 'Orbitron_700Bold',
+    textTransform: 'uppercase' as const,
   },
 
   header: {
@@ -428,6 +706,35 @@ const styles = {
 
   half: {
     flex: 1,
+  },
+
+  aiActions: {
+    flexDirection: 'row' as const,
+    gap: 10,
+    marginTop: 12,
+  },
+
+  aiButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderRadius: 16,
+    paddingVertical: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: 'rgba(0, 174, 234, 0.10)',
+  },
+
+  aiIcon: {
+    fontSize: 20,
+    marginBottom: 6,
+  },
+
+  aiButtonText: {
+    color: theme.colors.primary,
+    fontSize: 11,
+    fontFamily: 'Orbitron_700Bold',
+    textTransform: 'uppercase' as const,
   },
 
   addFoodButton: {
