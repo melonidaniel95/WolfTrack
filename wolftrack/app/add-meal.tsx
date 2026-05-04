@@ -132,61 +132,61 @@ export default function AddMealScreen() {
   }
 
   async function handleBarcodeScan(itemId: string) {
-    const permission = await requestCameraPermission()
+  const permission = await requestCameraPermission()
 
-    if (!permission.granted) {
-      Alert.alert('Permesso negato', 'Devi autorizzare la fotocamera.')
-      return
-    }
+  if (!permission.granted) {
+    Alert.alert('Permesso negato', 'Devi autorizzare la fotocamera.')
+    return
+  }
 
-    setScanningItemId(itemId)
-    setScanned(false)
+  setScanningItemId(itemId)
+  setScanned(false)
+  setScannerLoading(false)
+  setScannerMessage('Inquadra il codice a barre')
+  setScannerOpen(true)
+}
+
+  async function handleBarcodeDetected(barcode: string) {
+  if (scanned || !scanningItemId || scannerLoading) return
+
+  setScanned(true)
+  setScannerLoading(true)
+  setScannerMessage(`Barcode riconosciuto: ${barcode}`)
+
+  try {
+    const food = await findOrCreateFoodByBarcode(barcode)
+
+    updateItem(scanningItemId, 'foodName', food.name || '')
+    updateItem(scanningItemId, 'quantity', '100 g')
+    updateItem(scanningItemId, 'calories', String(food.calories || 0))
+    updateItem(scanningItemId, 'protein', String(food.protein || 0))
+    updateItem(scanningItemId, 'carbs', String(food.carbs || 0))
+    updateItem(scanningItemId, 'fat', String(food.fat || 0))
+
+    setScannerOpen(false)
+    setScanningItemId(null)
     setScannerLoading(false)
-    setScannerMessage('Inquadra il codice a barre')
-    setScannerOpen(true)
+    setScanned(false)
+
+    Alert.alert('Prodotto trovato', food.name || 'Alimento importato')
+  } catch (error) {
+    setScannerMessage('Prodotto non trovato')
+    setScannerLoading(false)
+
+    Alert.alert(
+      'Prodotto non trovato',
+      error instanceof Error ? error.message : 'Barcode non trovato.'
+    )
+
+    setTimeout(() => {
+      setScanned(false)
+      setScannerMessage('Riprova con un altro codice a barre')
+    }, 1000)
   }
+}
 
-  async function handleBarcodeDetected(data: string) {
-    if (scanned || !scanningItemId || scannerLoading) return
-
-    setScanned(true)
-    setScannerLoading(true)
-    setScannerMessage(`Barcode riconosciuto: ${data}`)
-
-    try {
-      const food = await findOrCreateFoodByBarcode(data)
-
-      updateItem(scanningItemId, 'foodName', food.name || '')
-      updateItem(scanningItemId, 'quantity', '100 g')
-      updateItem(scanningItemId, 'calories', String(food.calories || 0))
-      updateItem(scanningItemId, 'protein', String(food.protein || 0))
-      updateItem(scanningItemId, 'carbs', String(food.carbs || 0))
-      updateItem(scanningItemId, 'fat', String(food.fat || 0))
-
-      setScannerMessage(`Prodotto trovato: ${food.name || 'Alimento'}`)
-
-      setTimeout(() => {
-        setScannerOpen(false)
-        setScanningItemId(null)
-        setScannerLoading(false)
-        Alert.alert('Prodotto trovato', food.name || 'Alimento importato')
-      }, 700)
-    } catch (error: any) {
-      setScannerMessage('Barcode letto, ma prodotto non trovato')
-
-      setTimeout(() => {
-        setScanned(false)
-        setScannerLoading(false)
-        setScannerMessage('Riprova con un altro codice a barre')
-        Alert.alert(
-          'Prodotto non trovato',
-          error.message || 'Barcode non trovato.'
-        )
-      }, 800)
-    }
-  }
-
-  async function handleImageUpload(itemId: string) {
+ async function handleImageUpload(itemId: string) {
+  try {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
 
     if (status !== 'granted') {
@@ -197,18 +197,54 @@ export default function AddMealScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.8,
+      quality: 0.7,
+      base64: true,
     })
 
     if (result.canceled) return
 
-    Alert.alert(
-      'Foto selezionata',
-      'Foto caricata. Qui collegherai il riconoscimento AI.'
+    const imageBase64 = result.assets?.[0]?.base64
+
+    if (!imageBase64) {
+      Alert.alert('Errore', 'Base64 immagine mancante.')
+      return
+    }
+
+    setLoading(true)
+
+    const { data, error } = await supabase.functions.invoke(
+      'analyze-food-image',
+      {
+        body: {
+          imageBase64,
+        },
+      }
     )
 
-    console.log('Image URI:', result.assets[0].uri, 'Item ID:', itemId)
+    setLoading(false)
+
+    if (error) {
+      Alert.alert('Errore AI', error.message)
+      return
+    }
+
+    updateItem(itemId, 'foodName', data.foodName || '')
+    updateItem(itemId, 'quantity', data.quantity || '')
+    updateItem(itemId, 'calories', String(data.calories || 0))
+    updateItem(itemId, 'protein', String(data.protein || 0))
+    updateItem(itemId, 'carbs', String(data.carbs || 0))
+    updateItem(itemId, 'fat', String(data.fat || 0))
+
+    Alert.alert('Analisi completata', 'I dati sono stati compilati.')
+  } catch (error) {
+    setLoading(false)
+
+    Alert.alert(
+      'Errore',
+      error instanceof Error ? error.message : 'Errore sconosciuto'
+    )
   }
+}
 
   async function saveFoodIfMissing(item: MealItem) {
     const name = item.foodName.trim()
@@ -316,7 +352,11 @@ export default function AddMealScreen() {
             barcodeScannerSettings={{
               barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128'],
             }}
-            onBarcodeScanned={({ data }) => handleBarcodeDetected(data)}
+            onBarcodeScanned={
+              scanned || scannerLoading
+                ? undefined
+                : ({ data }) => handleBarcodeDetected(data)
+            }
           />
 
           <View style={styles.scanFrame} />
